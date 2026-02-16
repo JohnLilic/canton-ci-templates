@@ -1,0 +1,71 @@
+# Canton / Daml Release Pipeline
+# Triggered when you push a version tag (e.g., v0.1.0).
+# Builds the DAR, runs tests, and creates a GitHub Release with the DAR attached.
+#
+# Usage:
+#   git tag v0.1.0
+#   git push origin v0.1.0
+
+name: Daml Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  DAML_PROJECT_DIR: "."
+  JAVA_VERSION: "21"
+
+jobs:
+  release:
+    name: Build & Release DAR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Read Daml SDK version
+        id: sdk-version
+        working-directory: ${{ env.DAML_PROJECT_DIR }}
+        run: |
+          SDK_VERSION=$(grep '^sdk-version:' daml.yaml | awk '{print $2}')
+          echo "version=$SDK_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Install Daml SDK
+        run: |
+          curl -sSL https://get.daml.com/ | sh -s ${{ steps.sdk-version.outputs.version }}
+          echo "$HOME/.daml/bin" >> $GITHUB_PATH
+
+      - name: Build
+        working-directory: ${{ env.DAML_PROJECT_DIR }}
+        run: daml build
+
+      - name: Test
+        working-directory: ${{ env.DAML_PROJECT_DIR }}
+        run: daml test
+
+      - name: Get DAR filename
+        id: dar-name
+        working-directory: ${{ env.DAML_PROJECT_DIR }}
+        run: |
+          DAR_FILE=$(ls .daml/dist/*.dar | head -1)
+          echo "path=$DAR_FILE" >> $GITHUB_OUTPUT
+          echo "name=$(basename $DAR_FILE)" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.DAML_PROJECT_DIR }}/${{ steps.dar-name.outputs.path }}
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref, '-rc') || contains(github.ref, '-beta') || contains(github.ref, '-alpha') }}

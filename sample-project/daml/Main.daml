@@ -1,0 +1,47 @@
+-- | A simple IOU (I Owe You) contract demonstrating core Daml patterns:
+--   - Template with signatories and observers
+--   - Choices with controllers
+--   - Contract creation from within a choice
+module Main where
+
+import Daml.Script
+
+-- | An IOU represents a promise from an issuer to pay an owner a specified amount.
+template Iou
+  with
+    issuer : Party
+    owner : Party
+    currency : Text
+    amount : Decimal
+  where
+    signatory issuer
+    observer owner
+
+    -- Ensure the amount is always positive
+    ensure amount > 0.0
+
+    -- The owner can transfer the IOU to a new owner
+    choice Transfer : ContractId Iou
+      with
+        newOwner : Party
+      controller owner
+      do
+        create this with owner = newOwner
+
+    -- The owner can split the IOU into two IOUs
+    choice Split : (ContractId Iou, ContractId Iou)
+      with
+        splitAmount : Decimal
+      controller owner
+      do
+        assert (splitAmount > 0.0)
+        assert (splitAmount < amount)
+        cid1 <- create this with amount = splitAmount
+        cid2 <- create this with amount = (amount - splitAmount)
+        return (cid1, cid2)
+
+    -- The issuer can settle (pay) the IOU, archiving it
+    choice Settle : ()
+      controller issuer
+      do
+        return ()

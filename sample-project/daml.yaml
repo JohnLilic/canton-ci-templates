@@ -1,0 +1,8 @@
+sdk-version: 2.10.0
+name: canton-ci-sample
+version: 0.1.0
+source: daml
+dependencies:
+  - daml-prim
+  - daml-stdlib
+  - daml-script

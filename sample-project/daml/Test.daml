@@ -1,0 +1,115 @@
+-- | Tests for the IOU template demonstrating Daml Script testing patterns.
+module Test where
+
+import Daml.Script
+import Main
+
+-- | Test: Create an IOU and verify it exists
+testCreateIou : Script ()
+testCreateIou = script do
+  bank <- allocateParty "Bank"
+  alice <- allocateParty "Alice"
+
+  iouCid <- submit bank do
+    createCmd Iou with
+      issuer = bank
+      owner = alice
+      currency = "USD"
+      amount = 1000.0
+
+  -- Query to verify the IOU exists
+  ious <- query @Iou alice
+  assert (length ious == 1)
+
+-- | Test: Transfer an IOU to a new owner
+testTransferIou : Script ()
+testTransferIou = script do
+  bank <- allocateParty "Bank"
+  alice <- allocateParty "Alice"
+  bob <- allocateParty "Bob"
+
+  -- Bank issues IOU to Alice
+  iouCid <- submit bank do
+    createCmd Iou with
+      issuer = bank
+      owner = alice
+      currency = "USD"
+      amount = 500.0
+
+  -- Alice transfers to Bob
+  newIouCid <- submit alice do
+    exerciseCmd iouCid Transfer with
+      newOwner = bob
+
+  -- Bob should now have the IOU
+  bobIous <- query @Iou bob
+  assert (length bobIous == 1)
+
+  -- Alice should no longer have it
+  aliceIous <- query @Iou alice
+  assert (length aliceIous == 0)
+
+-- | Test: Split an IOU into two parts
+testSplitIou : Script ()
+testSplitIou = script do
+  bank <- allocateParty "Bank"
+  alice <- allocateParty "Alice"
+
+  iouCid <- submit bank do
+    createCmd Iou with
+      issuer = bank
+      owner = alice
+      currency = "EUR"
+      amount = 1000.0
+
+  -- Alice splits the IOU: 400 + 600
+  (cid1, cid2) <- submit alice do
+    exerciseCmd iouCid Split with
+      splitAmount = 400.0
+
+  -- Alice should now have two IOUs
+  aliceIous <- query @Iou alice
+  assert (length aliceIous == 2)
+
+-- | Test: Settle (pay off) an IOU
+testSettleIou : Script ()
+testSettleIou = script do
+  bank <- allocateParty "Bank"
+  alice <- allocateParty "Alice"
+
+  iouCid <- submit bank do
+    createCmd Iou with
+      issuer = bank
+      owner = alice
+      currency = "USD"
+      amount = 250.0
+
+  -- Bank settles the IOU
+  submit bank do
+    exerciseCmd iouCid Settle
+
+  -- IOU should be archived (no longer active)
+  aliceIous <- query @Iou alice
+  assert (length aliceIous == 0)
+
+-- | Test: Creating an IOU with zero or negative amount should fail
+testInvalidAmount : Script ()
+testInvalidAmount = script do
+  bank <- allocateParty "Bank"
+  alice <- allocateParty "Alice"
+
+  -- This should fail due to the `ensure` clause
+  submitMustFail bank do
+    createCmd Iou with
+      issuer = bank
+      owner = alice
+      currency = "USD"
+      amount = -100.0
+
+  -- Zero should also fail
+  submitMustFail bank do
+    createCmd Iou with
+      issuer = bank
+      owner = alice
+      currency = "USD"
+      amount = 0.0

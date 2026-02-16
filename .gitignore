@@ -1,0 +1,24 @@
+# Daml build artifacts
+.daml/
+.dlint/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node (if using JS/TS codegen)
+node_modules/
+daml.js/
+
+# Java build
+target/
+*.class
+
+# Environment
+.env
+.env.local
